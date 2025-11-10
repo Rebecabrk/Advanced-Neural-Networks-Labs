@@ -1,0 +1,54 @@
+SGD:
+  momentum:
+    default: 0.9
+    validator: float_range
+    range: [0.0, 1.0]
+  dampening:
+    default: 0.0
+    validator: float_range
+    range: [0.0, 1.0]
+  nesterov:
+    default: false
+    validator: boolean
+
+Adam:
+  betas:
+    default: "0.9,0.999"
+    validator: list_float
+  eps:
+    default: 1e-8
+    validator: float_range
+    range: [1e-12, 1e-4]
+  amsgrad:
+    default: false
+    validator: boolean
+
+AdamW:
+  betas:
+    default: "0.9,0.999"
+    validator: list_float
+  eps:
+    default: 1e-8
+    validator: float_range
+    range: [1e-12, 1e-4]
+  amsgrad:
+    default: false
+    validator: boolean
+
+Muon:
+  momentum:
+    default: 0.9
+    validator: float_range
+    range: [0.0, 1.0]
+  ns_steps:
+    default: 4
+    validator: positive_int
+
+SAM:
+  base_optimizer:
+    default: SGD
+    validator: optimizer_choice
+  rho:
+    default: 0.05
+    validator: float_range
+    range: [0.01, 0.2]

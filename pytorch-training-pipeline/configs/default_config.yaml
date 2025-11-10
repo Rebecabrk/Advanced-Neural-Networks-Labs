@@ -1,0 +1,94 @@
+# --- PyTorch Training Pipeline Default Configuration ---
+
+# ----------------------------------------------------------------------
+# GLOBAL SETTINGS
+# ----------------------------------------------------------------------
+global:
+  seed: 42
+  device: "auto"    
+  num_workers: 4     
+  save_dir: "checkpoints" 
+  report_dir: "logs" # tensorboard/wandb output
+
+# ----------------------------------------------------------------------
+# TRAINING PARAMETERS
+# ----------------------------------------------------------------------
+training:
+  epochs: 50
+  batch_size: 128    
+  gradient_accumulation_steps: 1
+  early_stopping:
+    enabled: True  
+    patience: 10  
+    metric: "val_accuracy" # Metric to monitor for early stopping
+    mode: "max"    # Look for the maximum value of the metric
+
+# ----------------------------------------------------------------------
+# DATASET CONFIGURATION
+# ----------------------------------------------------------------------
+data:
+  dataset_name: "CIFAR-100" 
+  train_split_ratio: 0.9 
+  data_augmentation: True 
+  # Default transformations for CIFAR/ImageNet-style data
+  transforms:
+    mean: [0.5, 0.5, 0.5]
+    std: [0.5, 0.5, 0.5]
+    img_size: 224 
+
+# ----------------------------------------------------------------------
+# MODEL CONFIGURATION
+# ----------------------------------------------------------------------
+model:
+  name: "resnet18" 
+  load_from: "timm" 
+  pretrained: False 
+
+  # MLP specific settings (only used if model.name is "MLP")
+  mlp_params:
+    input_size: 150528 # Example for 224x224x3 input: 3 * 224 * 224
+    hidden_layers: [1024, 512, 256]
+    activation: "ReLU"
+    dropout: 0.5
+    output_size: 100 # Number of classes for CIFAR-100
+
+# ----------------------------------------------------------------------
+# OPTIMIZER CONFIGURATION
+# ----------------------------------------------------------------------
+optimizer:
+  name: "AdamW" # Must be one of: SGD, Adam, AdamW, Muon, SAM [cite: 13]
+  lr: 0.001
+  weight_decay: 0.01
+
+  # Optimizer-specific parameters (AdamW/Adam)
+  adamw_params:
+    betas: [0.9, 0.999]
+    eps: 1e-8
+
+# ----------------------------------------------------------------------
+# LEARNING RATE SCHEDULER CONFIGURATION
+# ----------------------------------------------------------------------
+lr_scheduler:
+  name: "StepLR" # Must be one of: StepLR and ReduceLROnPlateau [cite: 14]
+  enabled: True
+  # Parameters for StepLR
+  steplr_params:
+    step_size: 15
+    gamma: 0.1
+
+# ----------------------------------------------------------------------
+# BATCH SIZE SCHEDULER CONFIGURATION
+# ----------------------------------------------------------------------
+batch_scheduler:
+  enabled: False # Integrates a batch size scheduler [cite: 15]
+  schedule_epochs: [10, 25, 40]
+  batch_size_increments: [128, 256, 512]
+
+# ----------------------------------------------------------------------
+# REPORTING AND LOGGING
+# ----------------------------------------------------------------------
+logging:
+  reporter: "wandb" # Integrated with Tensorboard and/or wandb [cite: 16]
+  project_name: "Advanced-NN-Assignment-3"
+  run_name: "Base_ResNet18_AdamW"
+  log_interval_steps: 100
