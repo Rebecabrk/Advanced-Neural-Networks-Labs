@@ -1,0 +1,30 @@
+StepLR:
+  step_size: 
+    default: 10
+    validator: int_range
+    range: [1, 100]
+  gamma: 
+    default: 0.
+    validator: float_range
+    range: [0.0, 1.0]
+
+ReduceLROnPlateau:
+  mode: 
+    default: min
+    validator: choice
+    choices: [min, max]
+  factor: 
+    default: 0.1
+    validator: float_range
+    range: [0.0, 1.0]
+  patience: 
+    default: 10
+    validator: positive_int
+  threshold: 
+    default: 1e-4
+    validator: float_range
+    range: [0.0, 1.0]
+  threshold_mode: 
+    default: relative
+    validator: choice
+    choices: [relative, absolute] 

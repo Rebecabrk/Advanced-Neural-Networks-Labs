@@ -1,0 +1,73 @@
+random_horizontal_flip:
+  enabled: False
+  probability: 
+    default: 0.5
+    validator: float_range
+    range: [0.0, 1.0]
+  
+random_vertical_flip:
+  enabled: False
+  probability: 
+    default: 0.5
+    validator: float_range
+    range: [0.0, 1.0]
+  
+random_rotation:
+  enabled: False
+  degrees: 
+    default: 15
+    validator: int_range
+    range: [0, 360]
+
+random_crop:
+  enabled: False
+  size: 
+    default: 32
+    validator: int_range
+    range: [1, 512]
+  padding: 
+    default: 4
+    validator: int_range
+    range: [0, 100]
+
+color_jitter:
+  enabled: False
+  brightness: 
+    default: 0.2
+    validator: float_range
+    range: [0.0, 1.0]
+  contrast: 
+    default: 0.2
+    validator: float_range
+    range: [0.0, 1.0]
+  saturation: 
+    default: 0.2
+    validator: float_range
+    range: [0.0, 1.0]
+  hue: 
+    default: 0.1
+    validator: float_range
+    range: [0.0, 0.5]
+
+random_grayscale:
+  enabled: False
+  probability: 
+    default: 0.1
+    validator: float_range
+    range: [0.0, 1.0]
+
+random_erasing:
+  enabled: False
+  probability: 
+    default: 0.1
+    validator: float_range
+    range: [0.0, 1.0]
+
+normalization:
+  enabled: False
+  mean: 
+    default: [0.5, 0.5, 0.5]
+    validator: list_float
+  std: 
+    default: [0.5, 0.5, 0.5]
+    validator: list_float    

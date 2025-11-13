@@ -1,57 +1,13 @@
-import argparse
 import sys
-import yaml
+import argparse
 from pathlib import Path
-
 from rich import print as rprint
 from rich.pretty import Pretty
 
-from utils.custom_config import get_custom_config
-from utils.constants import DEFAULT_CONFIG_PATH
-
-def load_config(config_path):
-    try:
-        with open(config_path, 'r') as f:
-            config = yaml.safe_load(f)
-        print(f"Configuration successfully loaded from {config_path}")
-        return config
-    except FileNotFoundError:
-        print(f"Error: Configuration file not found at {config_path}")
-        print("Please ensure your file is in the correct location.")
-        return None
-    except yaml.YAMLError:
-        print(f"Error: Invalid YAML format in {config_path}.")
-        return None
-    except Exception as e:
-        print(f"Error: Could not load configuration from {config_path} — {e}")
-        print("Please check the file path, permissions, and that the file is a readable YAML file.")
-        return None
-
-def get_config(args):
-    if args.config:
-        print(f"Attempting to load custom config from: {args.config}")
-        config = load_config(args.config)
-        if config:
-            print("Loaded custom configuration.")
-            return config
-        else:
-            print("Failed to load custom configuration.")
-            sys.exit(1)
-    else:
-        print("\n*****************************************************************")
-        print("  PyTorch Training Pipeline - Author: Rebeca")
-        print("  No config file provided. Attempting to load default config.")
-        print("*****************************************************************")
-
-        config = load_config(DEFAULT_CONFIG_PATH)
-
-        if config:
-            print(f"Using default configuration loaded from {DEFAULT_CONFIG_PATH}.")
-            return config
-        else:
-            # Fallback if the default file is missing/broken (Highly discouraged in production)
-            print("WARNING: Could not load default config file.")
-            sys.exit(1)
+from utils.custom_config import get_commandline_config
+from utils.config_loader import get_argfile_config
+from pipeline import setup_pipeline
+from utils.config_loader import save_config_to_yaml
 
 def main():
     parser = argparse.ArgumentParser(
@@ -65,16 +21,15 @@ def main():
         help="Path to a custom YAML configuration file to load settings."
     )
     args = parser.parse_args()
-    config = get_config(args)
+    config = get_argfile_config(args)
 
-    print("\n--- Final Configuration Used ---")
-    rprint(Pretty(config))
-    
     if not args.config:
+        print("\n--- Default Configuration  ---")
+        rprint(Pretty(config))
         choice = input("\nDo you want to use this [D]efault configuration or set a [C]ustom configuration interactively? (D/C): ").strip().lower()
         
         if choice == 'c':
-            config = get_custom_config(config)
+            config = get_commandline_config(config)
             
         elif choice == 'd':
             print("\n Starting pipeline with loaded DEFAULT configuration...")
@@ -83,8 +38,32 @@ def main():
             print("Invalid choice. Exiting pipeline.")
             sys.exit(1)
 
+    print("\n--- Final Configuration ---")
+    rprint(Pretty(config))
+    start_choice = input("\n Would you like to start training with the above configuration? (y/n): ").strip().lower()
+    if start_choice == 'n':
+        print("Training aborted by user.")
+        sys.exit(0)
 
-    print("\n(Pipeline execution finished. Training would start with the above configuration.)")
+    print("\n Setting up the training pipeline...")
+    try:
+        print(setup_pipeline(config))
+        print("Pipeline setup completed successfully.")
+    except Exception as e:
+        print(f"Pipeline setup failed: {e}")
+        sys.exit(1)
+
+    save_choice = input("\nDo you want to save this configuration to a YAML file? (y/n): ").strip().lower()
+    if save_choice == 'y':
+        filename = input("Enter name/small description for the configuration: ").strip()
+        save_path = input("Enter the file path to save the configuration (Default: /saved-configurations)): ").strip()
+        if not save_path:
+            save_path = "saved-configurations/{}_config.yaml".format(filename.replace(" ", "_"))
+        try:
+            save_config_to_yaml(config, save_path)
+            print(f"Configuration saved to {save_path}")
+        except Exception as e:
+            print(f"Failed to save configuration: {e}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,14 @@
+# mlp_params:
+hidden_layers: 
+  default: [1024, 512, 256]
+  validator: list_positive_int
+
+activations: 
+  default: ["ReLU", "ReLU", "Sigmoid"]
+  validator: list_choice
+  valid_list: ["ReLU", "Tanh", "Sigmoid", "LeakyReLU"]
+
+dropout: 
+  default: 0.5
+  validator: float_range
+  range: [0.0, 1.0]
