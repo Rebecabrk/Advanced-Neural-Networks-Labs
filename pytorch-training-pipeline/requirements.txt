@@ -1,0 +1,8 @@
+torch>=2.0
+torchvision>=0.15
+timm
+rich
+numpy==1.26.4
+opencv-python
+muon
+pyyaml

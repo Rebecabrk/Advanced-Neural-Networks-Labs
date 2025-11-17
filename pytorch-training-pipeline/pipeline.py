@@ -1,22 +1,39 @@
 import torch
 import timm
+from torch.cuda.amp import GradScaler
 import torchvision.transforms.v2 as v2
 import torch.nn as nn
 import torch.optim as optim
 import torchvision
 import muon
+from tqdm import tqdm
 
 from datasets.caching import CachedDataset
 
 def setup_pipeline(config):
+	print("Setting up the training pipeline...")
 	device = torch.device('cuda' if torch.cuda.is_available() and config['global']['device'] == 'auto' else 'cpu')
+	enable_half = device.type != "cpu"
+	scaler = GradScaler(device, enabled=enable_half)
+
+	print("Grad scaler is enabled:", enable_half)
+	if device.type == "cuda":
+    # This flag tells pytorch to use the cudnn auto-tuner to find the most efficient convolution algorithm for
+    # This training.
+		torch.backends.cudnn.benchmark = True
+		torch.set_float32_matmul_precision('high')
+		print("Benchmark set to true with high float32 precision")
+	else:
+		print("Cuda is not used")
 
     # transforms
 	test_transforms = [
 		v2.ToTensor(), 
 		v2.ToDtype(torch.float32, scale=True)
 	]
-	cacheable_transforms = [v2.ToTensor(), v2.ToDtype(torch.float32, scale=True)]
+	cacheable_transforms = [
+		v2.ToTensor(), 
+		v2.ToDtype(torch.float32, scale=True)]
 	runtime_transforms = []
 	normalization_cfg = None
 	
@@ -86,12 +103,13 @@ def setup_pipeline(config):
 	else:
 		raise ValueError(f"Dataset {dataset_name} not supported.")
 
-	trainset = CachedDataset(trainset_base, runtime_transform)
+	# trainset = CachedDataset(trainset_base, runtime_transform)
 
 	# data loaders
 	batch_size = config['training'].get('batch_size', 128)
-	trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=config['global'].get('num_workers', 4))
-	testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=config['global'].get('num_workers', 4))
+	num_workers = config['global'].get('num_workers', 4)
+	trainloader = torch.utils.data.DataLoader(trainset_base, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+	testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
 	# model
 	model_name = config['model']['name']
@@ -123,6 +141,10 @@ def setup_pipeline(config):
 	else:
 		pretrained = config['model'].get('pretrained', False)
 		model = timm.create_model(model_name, pretrained=pretrained, num_classes=num_classes)
+		for param in model.parameters():
+			param.requires_grad = False
+		for param in model.get_classifier().parameters():
+			param.requires_grad = True
 
 	# optimizer
 	optimizer_name = config['optimizer']['name']
@@ -160,5 +182,73 @@ def setup_pipeline(config):
 		'testloader': testloader,
 		'model': model,
 		'optimizer': optimizer,
-		'scheduler': scheduler
+		'scheduler': scheduler,
+		'scaler': scaler,
+		'enable_half': enable_half
 	}
+
+
+def train(model, train_loader, device, criterion, optimizer, scaler, enable_half):
+    model.train()
+    correct = 0
+    total = 0
+    
+    for inputs, targets in train_loader:
+        # inputs, targets = cutmix_or_mixup(inputs, targets)
+        inputs, targets = inputs.to(device, non_blocking=True), targets.to(device, non_blocking=True)
+        inputs = inputs.view(inputs.size(0), -1) 
+		# if targets.ndim > 1:
+        #     # We do this when cutmix or mixup was used, transforming the hard labels into soft labels
+        #     targets = targets.argmax(1)
+            
+        with torch.autocast(device.type, enabled=enable_half):
+            outputs = model(inputs)
+            loss = criterion(outputs, targets)
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
+        optimizer.zero_grad()
+
+        predicted = outputs.argmax(1)
+        total += targets.size(0)
+        correct += predicted.eq(targets).sum().item()
+    
+    return 100.0 * correct / total
+
+def run_pipeline(config):
+	setup = setup_pipeline(config)
+	device = setup['device']
+	trainloader = setup['trainloader']
+	testloader = setup['testloader']
+	model = setup['model'].to(device)
+	optimizer = setup['optimizer']
+	scheduler = setup['scheduler']
+	scaler = setup['scaler']
+	enable_half = setup['enable_half']
+	# criterion = setup['criterion']
+	criterion = nn.CrossEntropyLoss()
+
+	model = model.to(device)
+	# model = torch.jit.script(model) # compilation
+
+	best = 0.0
+	best_epoch = 0
+	epochs = list(range(config['training'].get('epochs', 50)))
+
+	with tqdm(epochs) as tbar:
+		for epoch in tbar:
+			train_acc = train(
+				model, trainloader, 
+				device, criterion, 
+				optimizer, scaler, 
+				enable_half)
+			if config['lr_scheduler']['name'] == 'ReduceLROnPlateau':
+				scheduler.step(train_acc)
+			elif scheduler is not None:
+				scheduler.step()
+			
+			if train_acc > best:
+				best = train_acc
+				best_epoch = epoch
+				
+			tbar.set_description(f"Train: {train_acc:.2f}, Best: {best:.2f} at epoch {best_epoch}")

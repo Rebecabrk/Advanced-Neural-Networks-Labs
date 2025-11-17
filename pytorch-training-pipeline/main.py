@@ -46,10 +46,8 @@ def main():
             print("Training aborted by user.")
             sys.exit(0)
 
-    print("\n Setting up the training pipeline...")
     try:
         run_pipeline(config)
-        print("Pipeline setup completed successfully.")
     except Exception as e:
         print(f"Pipeline setup failed: {e}")
         sys.exit(1)
@@ -70,3 +68,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # activate virtual environment
+    # source venv/bin/activate

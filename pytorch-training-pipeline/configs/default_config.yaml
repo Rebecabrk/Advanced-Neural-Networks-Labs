@@ -9,6 +9,7 @@ data:
   data_augmentation: False 
 
 # if data_augmentation is True also add a transforms mapping
+# the mapping will contain only the transforms wanted
 # example:
 # transforms:
   # normalization:
@@ -21,19 +22,20 @@ data:
   #     validator: list_float
   # random_horizontal_flip:
   # ......................
+  #   see more available transforms in /configs/transforms.yaml
 
 # ----------------------------------------------------------------------
 # MODEL CONFIGURATION
 # ----------------------------------------------------------------------
 model:
-  name: "resnet18" 
+  name: "MLP" 
   pretrained: False 
   # if MLP is chosen, also add mlp_params mapping
   # example: 
-  # mlp_params:
-  #   hidden_layers: [1024, 512, 256]
-  #   activation: ["ReLU", "ReLU", "Sigmoid"]
-  #   dropout: 0.5
+  mlp_params:
+    hidden_layers: [1024, 512, 256]
+    activation: ["ReLU", "ReLU", "Sigmoid"]
+    dropout: 0.5
 
 # ----------------------------------------------------------------------
 # OPTIMIZER CONFIGURATION
@@ -42,6 +44,7 @@ optimizer:
   name: "SGD" 
   lr: 0.001
   weight_decay: 0.01
+  # each optimizer has its params mapping 
   sgd_params:
     momentum: 0.0
     dampening: 0.0
@@ -70,15 +73,6 @@ lr_scheduler:
   name: "StepLR" 
   step_size: 15
   gamma: 0.1
-
-# ----------------------------------------------------------------------
-# BATCH SIZE SCHEDULER CONFIGURATION
-# ----------------------------------------------------------------------
-batch_scheduler:
-  enabled: False 
-  schedule_epochs: [10, 25, 40]
-  batch_size_increments: [128, 256, 512]
-
 
 # NOT CUSTOMIZABLE
 # ----------------------------------------------------------------------

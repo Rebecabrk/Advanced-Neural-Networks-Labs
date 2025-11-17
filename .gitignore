@@ -209,3 +209,8 @@ __marimo__/
 
 # vscode
 .vscode/
+pytorch-training-pipeline/.vscode/
+
+# data
+data/
+pytorch-training-pipeline/data/
