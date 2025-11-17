@@ -214,3 +214,6 @@ pytorch-training-pipeline/.vscode/
 # data
 data/
 pytorch-training-pipeline/data/
+
+# wandb
+pytorch-training-pipeline/wandb/
