@@ -55,7 +55,7 @@ optimizer:
 # TRAINING PARAMETERS
 # ----------------------------------------------------------------------
 training:
-  epochs: 50
+  epochs: 10
   batch_size: 128 
   batch_scheduler: 
     enabled: False 
@@ -81,7 +81,7 @@ lr_scheduler:
 logging:
   reporter: "wandb" 
   project_name: "Advanced-NN-Assignment-3"
-  run_name: "Base_ResNet18_AdamW"
+  run_name: "Default_MLP_SGD"
   log_interval_steps: 100
 
 # ----------------------------------------------------------------------

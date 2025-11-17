@@ -267,5 +267,7 @@ def get_commandline_config(current_config):
             constraints={'valid_list': VALID_SCHEDULERS}
         )
         custom_cfg = get_lr_scheduler_params(custom_cfg)
+    custom_cfg['logging']['run_name'] = f'Custom_' + custom_cfg['model']['name'] + \
+                                            '_' + custom_cfg['optimizer']['name'] 
 
     return custom_cfg

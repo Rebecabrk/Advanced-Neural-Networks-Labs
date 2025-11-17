@@ -7,6 +7,7 @@ import torch.optim as optim
 import torchvision
 import muon
 from tqdm import tqdm
+import wandb
 
 from datasets.caching import CachedDataset
 
@@ -28,11 +29,13 @@ def setup_pipeline(config):
 
     # transforms
 	test_transforms = [
-		v2.ToTensor(), 
+		# v2.ToTensor(),
+		v2.ToImage(),  
 		v2.ToDtype(torch.float32, scale=True)
 	]
 	cacheable_transforms = [
-		v2.ToTensor(), 
+		# v2.ToTensor(), 
+		v2.ToImage(),
 		v2.ToDtype(torch.float32, scale=True)]
 	runtime_transforms = []
 	normalization_cfg = None
@@ -103,12 +106,19 @@ def setup_pipeline(config):
 	else:
 		raise ValueError(f"Dataset {dataset_name} not supported.")
 
-	# trainset = CachedDataset(trainset_base, runtime_transform)
+	trainset = CachedDataset(trainset_base, runtime_transform)
+
+	# Split trainset into train and validation
+	val_split = config['training'].get('val_split', 0.2)  # default 20% validation
+	train_len = int((1 - val_split) * len(trainset))
+	val_len = len(trainset) - train_len
+	train_subset, val_subset = torch.utils.data.random_split(trainset, [train_len, val_len])
 
 	# data loaders
 	batch_size = config['training'].get('batch_size', 128)
 	num_workers = config['global'].get('num_workers', 4)
-	trainloader = torch.utils.data.DataLoader(trainset_base, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+	trainloader = torch.utils.data.DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+	valloader = torch.utils.data.DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 	testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
 	# model
@@ -179,6 +189,7 @@ def setup_pipeline(config):
 	return {
 		'device': device,
 		'trainloader': trainloader,
+		'valloader': valloader,
 		'testloader': testloader,
 		'model': model,
 		'optimizer': optimizer,
@@ -187,6 +198,26 @@ def setup_pipeline(config):
 		'enable_half': enable_half
 	}
 
+def evaluate(model, val_loader, device, criterion, enable_half):
+    model.eval()
+    correct = 0
+    total = 0
+    val_loss = 0.0
+    with torch.no_grad():
+        for inputs, targets in val_loader:
+            inputs, targets = inputs.to(device, non_blocking=True), targets.to(device, non_blocking=True)
+            if isinstance(model, nn.Sequential):
+                inputs = inputs.view(inputs.size(0), -1)
+            with torch.autocast(device.type, enabled=enable_half):
+                outputs = model(inputs)
+                loss = criterion(outputs, targets)
+            val_loss += loss.item() * targets.size(0)
+            predicted = outputs.argmax(1)
+            total += targets.size(0)
+            correct += predicted.eq(targets).sum().item()
+    avg_loss = val_loss / total
+    accuracy = 100.0 * correct / total
+    return accuracy, avg_loss
 
 def train(model, train_loader, device, criterion, optimizer, scaler, enable_half):
     model.train()
@@ -196,7 +227,8 @@ def train(model, train_loader, device, criterion, optimizer, scaler, enable_half
     for inputs, targets in train_loader:
         # inputs, targets = cutmix_or_mixup(inputs, targets)
         inputs, targets = inputs.to(device, non_blocking=True), targets.to(device, non_blocking=True)
-        inputs = inputs.view(inputs.size(0), -1) 
+        if isinstance(model, nn.Sequential):
+            inputs = inputs.view(inputs.size(0), -1)
 		# if targets.ndim > 1:
         #     # We do this when cutmix or mixup was used, transforming the hard labels into soft labels
         #     targets = targets.argmax(1)
@@ -234,6 +266,8 @@ def run_pipeline(config):
 	best = 0.0
 	best_epoch = 0
 	epochs = list(range(config['training'].get('epochs', 50)))
+	wandb.init(project=config['logging'].get('project_name', "Default_Project"), 
+			config=config, name=config['logging'].get('run_name', "Default_Run"))
 
 	with tqdm(epochs) as tbar:
 		for epoch in tbar:
@@ -242,8 +276,17 @@ def run_pipeline(config):
 				device, criterion, 
 				optimizer, scaler, 
 				enable_half)
+			val_acc, val_loss = evaluate(
+				model, setup['valloader'], 
+				device, criterion, enable_half)
+			wandb.log({
+				"train_acc": train_acc,
+				"val_acc": val_acc,
+				"val_loss": val_loss,
+				"epoch": epoch
+			})
 			if config['lr_scheduler']['name'] == 'ReduceLROnPlateau':
-				scheduler.step(train_acc)
+				scheduler.step(val_loss)
 			elif scheduler is not None:
 				scheduler.step()
 			
