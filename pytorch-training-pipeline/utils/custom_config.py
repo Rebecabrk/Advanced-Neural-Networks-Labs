@@ -197,31 +197,31 @@ def get_commandline_config(current_config):
             "Patience must be a positive integer",
             default=current_config['training']['early_stopping']['patience']
         )
-    custom_cfg['training']['batch_scheduler'] = get_validated_input(
+    custom_cfg['training']['batch_size'] = get_validated_input(
+            "Enter batch size (positive integer)",
+            'positive_int',
+            "Batch size must be a positive integer",
+            default=current_config['training']['batch_size']
+        )
+    custom_cfg['training']['batch_scheduler']['enabled'] = get_validated_input(
         "Enable Batch Size Scheduler (True/False)",
         'boolean',
         "Invalid boolean value",
-        default=current_config['training'].get('batch_scheduler', {}).get('enabled', False)
+        default=current_config['training']['batch_scheduler']['enabled']
     )
+
     if custom_cfg['training']['batch_scheduler']:
         custom_cfg['training']['batch_scheduler']['schedule_epochs'] = get_validated_input(
             "Enter schedule epochs (comma-separated positive integers)",
             'list_float',
             "Schedule epochs must be a comma-separated list of positive integers",
-            default=current_config['training'].get('batch_scheduler', {}).get('schedule_epochs', [10, 25, 40])
+            default=current_config['training']['batch_scheduler']['schedule_epochs']
         )
         custom_cfg['training']['batch_scheduler']['batch_size_increments'] = get_validated_input(
             "Enter batch size increments (comma-separated positive integers)",
             'list_float',
             "Batch size increments must be a comma-separated list of positive integers",
             default=current_config['training'].get('batch_scheduler', {}).get('batch_size_increments', [128, 256, 512])
-        )
-    else:
-        custom_cfg['training']['batch_size'] = get_validated_input(
-            "Enter batch size (positive integer)",
-            'positive_int',
-            "Batch size must be a positive integer",
-            default=current_config['training']['batch_size']
         )
 
     # --- 4. OPTIMIZER CONFIGURATION ---
