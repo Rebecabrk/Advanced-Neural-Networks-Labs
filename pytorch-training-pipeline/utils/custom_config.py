@@ -75,7 +75,7 @@ def get_transforms(custom_cfg):
     custom_cfg['data']['transforms'] = enabled_transforms
     return custom_cfg
 
-def get_scheduler_params(custom_cfg):
+def get_lr_scheduler_params(custom_cfg):
     scheduler_name = custom_cfg['lr_scheduler']['name']
     print(f"\n  -- Specific {scheduler_name} Parameters --")
     scheduler_specific_params = SCHEDULER_PARAMS.get(scheduler_name, {})
@@ -266,6 +266,6 @@ def get_commandline_config(current_config):
             default=current_config['lr_scheduler']['name'],
             constraints={'valid_list': VALID_SCHEDULERS}
         )
-        custom_cfg = get_scheduler_params(custom_cfg)
+        custom_cfg = get_lr_scheduler_params(custom_cfg)
 
     return custom_cfg

@@ -6,7 +6,7 @@ from rich.pretty import Pretty
 
 from utils.custom_config import get_commandline_config
 from utils.config_loader import get_argfile_config
-from pipeline import setup_pipeline
+from pipeline import run_pipeline
 from utils.config_loader import save_config_to_yaml
 
 def main():
@@ -38,32 +38,34 @@ def main():
             print("Invalid choice. Exiting pipeline.")
             sys.exit(1)
 
-    print("\n--- Final Configuration ---")
-    rprint(Pretty(config))
-    start_choice = input("\n Would you like to start training with the above configuration? (y/n): ").strip().lower()
-    if start_choice == 'n':
-        print("Training aborted by user.")
-        sys.exit(0)
+    if choice != 'd':
+        print("\n--- Final Configuration ---")
+        rprint(Pretty(config))
+        start_choice = input("\n Would you like to start training with the above configuration? (y/n): ").strip().lower()
+        if start_choice == 'n':
+            print("Training aborted by user.")
+            sys.exit(0)
 
     print("\n Setting up the training pipeline...")
     try:
-        print(setup_pipeline(config))
+        run_pipeline(config)
         print("Pipeline setup completed successfully.")
     except Exception as e:
         print(f"Pipeline setup failed: {e}")
         sys.exit(1)
 
-    save_choice = input("\nDo you want to save this configuration to a YAML file? (y/n): ").strip().lower()
-    if save_choice == 'y':
-        filename = input("Enter name/small description for the configuration: ").strip()
-        save_path = input("Enter the file path to save the configuration (Default: /saved-configurations)): ").strip()
-        if not save_path:
-            save_path = "saved-configurations/{}_config.yaml".format(filename.replace(" ", "_"))
-        try:
-            save_config_to_yaml(config, save_path)
-            print(f"Configuration saved to {save_path}")
-        except Exception as e:
-            print(f"Failed to save configuration: {e}")
+    if choice != 'd':
+        save_choice = input("\nDo you want to save this configuration to a YAML file? (y/n): ").strip().lower()
+        if save_choice == 'y':
+            filename = input("Enter name/small description for the configuration: ").strip()
+            save_path = input("Enter the file path to save the configuration (Default: /saved-configurations)): ").strip()
+            if not save_path:
+                save_path = "saved-configurations/{}_config.yaml".format(filename.replace(" ", "_"))
+            try:
+                save_config_to_yaml(config, save_path)
+                print(f"Configuration saved to {save_path}")
+            except Exception as e:
+                print(f"Failed to save configuration: {e}")
 
 
 if __name__ == "__main__":
