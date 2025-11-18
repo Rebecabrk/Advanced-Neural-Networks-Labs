@@ -9,7 +9,7 @@ import muon
 from tqdm import tqdm
 import wandb
 
-from datasets.caching import CachedDataset
+from utils.caching import CachedDataset
 
 def setup_pipeline(config):
 	print("Setting up the training pipeline...")
