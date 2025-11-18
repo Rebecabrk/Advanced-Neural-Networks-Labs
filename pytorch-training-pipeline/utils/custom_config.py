@@ -210,7 +210,7 @@ def get_commandline_config(current_config):
         default=current_config['training']['batch_scheduler']['enabled']
     )
 
-    if custom_cfg['training']['batch_scheduler']:
+    if custom_cfg['training']['batch_scheduler']['enabled']:
         custom_cfg['training']['batch_scheduler']['schedule_epochs'] = get_validated_input(
             "Enter schedule epochs (comma-separated positive integers)",
             'list_float',
