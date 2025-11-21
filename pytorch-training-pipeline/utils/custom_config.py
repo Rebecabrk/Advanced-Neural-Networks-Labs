@@ -46,28 +46,28 @@ def get_optimizer_params(optimizer_name, custom_cfg):
         # Store the result in the custom config
         custom_cfg['optimizer'][f'{optimizer_name.lower()}_params'][param_name] = value
 
-    if optimizer_name == "SAM":
-        base_opt = custom_cfg['optimizer']['sam_params']['base_optimizer']
-        base_params = OPTIMIZER_PARAMS.get(base_opt, {})
-        custom_cfg['optimizer']['sam_params'][f'{base_opt.lower()}_params'] = {}
-        print(f"\n  -- {base_opt} Parameters for SAM --")
-        for param_name, param_details in base_params.items():
-            prompt = f"    Enter value for {param_name} (for {base_opt})"
-            validator_type = param_details['validator']
-            default_val = param_details['default']
-            constraints = {}
-            if 'range' in param_details:
-                constraints['range'] = param_details['range']
-            if 'valid_list' in param_details:
-                constraints['valid_list'] = param_details['valid_list']
-            value = get_validated_input(
-                prompt,
-                validator_type,
-                f"{param_name} validation failed.",
-                default=default_val,
-                constraints=constraints
-            )
-            custom_cfg['optimizer']['sam_params'][f'{base_opt.lower()}_params'][param_name] = value
+    # if optimizer_name == "SAM":
+    #     base_opt = custom_cfg['optimizer']['sam_params']['base_optimizer']
+    #     base_params = OPTIMIZER_PARAMS.get(base_opt, {})
+    #     custom_cfg['optimizer']['sam_params'][f'{base_opt.lower()}_params'] = {}
+    #     print(f"\n  -- {base_opt} Parameters for SAM --")
+    #     for param_name, param_details in base_params.items():
+    #         prompt = f"    Enter value for {param_name} (for {base_opt})"
+    #         validator_type = param_details['validator']
+    #         default_val = param_details['default']
+    #         constraints = {}
+    #         if 'range' in param_details:
+    #             constraints['range'] = param_details['range']
+    #         if 'valid_list' in param_details:
+    #             constraints['valid_list'] = param_details['valid_list']
+    #         value = get_validated_input(
+    #             prompt,
+    #             validator_type,
+    #             f"{param_name} validation failed.",
+    #             default=default_val,
+    #             constraints=constraints
+    #         )
+    #         custom_cfg['optimizer']['sam_params'][f'{base_opt.lower()}_params'][param_name] = value
 
     return custom_cfg
 

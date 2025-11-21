@@ -8,7 +8,7 @@ import torchvision
 import muon
 from tqdm import tqdm
 import wandb
-import torch_optimizer
+from sam import SAMSGD
 
 from utils.caching import CachedDataset
 
@@ -173,41 +173,34 @@ def setup_pipeline(config):
 		optimizer = muon.Muon(model.parameters(), lr=lr, weight_decay=weight_decay, **muon_params)
 	elif optimizer_name == 'SAM':
 		sam_params = config['optimizer'].get('sam_params', {})
-		base_optimizer_name = sam_params.get('base_optimizer', 'SGD')
+		# base_optimizer_name = sam_params.get('base_optimizer', 'SGD')
 		rho = sam_params.get('rho', 0.05)
 		# Extract base optimizer params
-		base_optimizer_params = {}
-		if base_optimizer_name == 'SGD':
-			base_optimizer = optim.SGD
-			# Extract SGD params
-			sgd_params = sam_params.get('sgd_params', {})
-			base_optimizer_params['momentum'] = sgd_params.get('momentum', 0.9)
-			base_optimizer_params['dampening'] = sgd_params.get('dampening', 0.0)
-			base_optimizer_params['nesterov'] = sgd_params.get('nesterov', False)
-		elif base_optimizer_name == 'Adam':
-			base_optimizer = optim.Adam
-			# Extract Adam params
-			adam_params = sam_params.get('adam_params', {})
-			base_optimizer_params['betas'] = tuple(map(float, adam_params.get('betas', [0.9, 0.999])))
-			base_optimizer_params['eps'] = adam_params.get('eps', 1e-8)
-			base_optimizer_params['amsgrad'] = adam_params.get('amsgrad', False)
-		elif base_optimizer_name == 'AdamW':
-			base_optimizer = optim.AdamW
-			# Extract AdamW params
-			adamw_params = sam_params.get('adamw_params', {})
-			base_optimizer_params['betas'] = tuple(map(float, adamw_params.get('betas', [0.9, 0.999])))
-			base_optimizer_params['eps'] = adamw_params.get('eps', 1e-8)
-			base_optimizer_params['amsgrad'] = adamw_params.get('amsgrad', False)
-		else:
-			raise ValueError(f"SAM base optimizer {base_optimizer_name} not supported.")
-		optimizer = torch_optimizer.SAM(
-			model.parameters(),
-			base_optimizer,
-			rho=rho,
-			lr=lr,
-			weight_decay=weight_decay,
-			**base_optimizer_params
-		)
+		# base_optimizer_params = {}
+		# if base_optimizer_name == 'SGD':
+		# 	base_optimizer = optim.SGD
+		# 	# Extract SGD params
+		# 	sgd_params = sam_params.get('sgd_params', {})
+		# 	base_optimizer_params['momentum'] = sgd_params.get('momentum', 0.9)
+		# 	base_optimizer_params['dampening'] = sgd_params.get('dampening', 0.0)
+		# 	base_optimizer_params['nesterov'] = sgd_params.get('nesterov', False)
+		# elif base_optimizer_name == 'Adam':
+		# 	base_optimizer = optim.Adam
+		# 	# Extract Adam params
+		# 	adam_params = sam_params.get('adam_params', {})
+		# 	base_optimizer_params['betas'] = tuple(map(float, adam_params.get('betas', [0.9, 0.999])))
+		# 	base_optimizer_params['eps'] = adam_params.get('eps', 1e-8)
+		# 	base_optimizer_params['amsgrad'] = adam_params.get('amsgrad', False)
+		# elif base_optimizer_name == 'AdamW':
+		# 	base_optimizer = optim.AdamW
+		# 	# Extract AdamW params
+		# 	adamw_params = sam_params.get('adamw_params', {})
+		# 	base_optimizer_params['betas'] = tuple(map(float, adamw_params.get('betas', [0.9, 0.999])))
+		# 	base_optimizer_params['eps'] = adamw_params.get('eps', 1e-8)
+		# 	base_optimizer_params['amsgrad'] = adamw_params.get('amsgrad', False)
+		# else:
+		# 	raise ValueError(f"SAM base optimizer {base_optimizer_name} not supported.")
+		optimizer = SAMSGD(model.parameters(), lr=lr, rho=rho)
 	else:
 		raise ValueError(f"Optimizer {optimizer_name} not supported.")
 

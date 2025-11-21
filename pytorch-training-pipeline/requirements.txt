@@ -6,3 +6,7 @@ numpy==1.26.4
 opencv-python
 muon
 pyyaml
+torch-optimizer  
+# for debugging in colab
+ipdb
+sam-pytorch
