@@ -37,8 +37,7 @@ def main():
         else:
             print("Invalid choice. Exiting pipeline.")
             sys.exit(1)
-
-    if choice != 'd':
+    else:
         print("\n--- Final Configuration ---")
         rprint(Pretty(config))
         start_choice = input("\n Would you like to start training with the above configuration? (y/n): ").strip().lower()
@@ -46,24 +45,23 @@ def main():
             print("Training aborted by user.")
             sys.exit(0)
 
+    save_choice = input("\nDo you want to save this configuration to a YAML file? (y/n): ").strip().lower()
+    if save_choice == 'y':
+        filename = input("Enter name/small description for the configuration: ").strip()
+        save_path = input("Enter the file path to save the configuration (Default: /saved-configurations)): ").strip()
+        if not save_path:
+            save_path = "saved-configurations/{}_config.yaml".format(filename.replace(" ", "_"))
+        try:
+            save_config_to_yaml(config, save_path)
+            print(f"Configuration saved to {save_path}")
+        except Exception as e:
+            print(f"Failed to save configuration: {e}")
+
     try:
         run_pipeline(config)
     except Exception as e:
         print(f"Pipeline setup failed: {e}")
         sys.exit(1)
-
-    if choice != 'd':
-        save_choice = input("\nDo you want to save this configuration to a YAML file? (y/n): ").strip().lower()
-        if save_choice == 'y':
-            filename = input("Enter name/small description for the configuration: ").strip()
-            save_path = input("Enter the file path to save the configuration (Default: /saved-configurations)): ").strip()
-            if not save_path:
-                save_path = "saved-configurations/{}_config.yaml".format(filename.replace(" ", "_"))
-            try:
-                save_config_to_yaml(config, save_path)
-                print(f"Configuration saved to {save_path}")
-            except Exception as e:
-                print(f"Failed to save configuration: {e}")
 
 
 if __name__ == "__main__":
