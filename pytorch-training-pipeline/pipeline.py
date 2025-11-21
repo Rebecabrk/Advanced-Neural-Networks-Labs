@@ -8,6 +8,7 @@ import torchvision
 import muon
 from tqdm import tqdm
 import wandb
+import torch_optimizer
 
 from utils.caching import CachedDataset
 
@@ -199,7 +200,7 @@ def setup_pipeline(config):
 			base_optimizer_params['amsgrad'] = adamw_params.get('amsgrad', False)
 		else:
 			raise ValueError(f"SAM base optimizer {base_optimizer_name} not supported.")
-		optimizer = optim.SAM(
+		optimizer = torch_optimizer.SAM(
 			model.parameters(),
 			base_optimizer,
 			rho=rho,
