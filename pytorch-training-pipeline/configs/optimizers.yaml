@@ -58,6 +58,19 @@ SAM:
   base_optimizer:
     default: SGD
     validator: optimizer_choice
+    valid_list: [SGD, Adam, AdamW]
+    sgd_params:
+      momentum:
+        default: 0.9
+        validator: float_range
+        range: [0.0, 1.0]
+      dampening:
+        default: 0.0
+        validator: float_range
+        range: [0.0, 1.0]
+      nesterov:
+        default: false
+        validator: boolean
   rho:
     default: 0.05
     validator: float_range
