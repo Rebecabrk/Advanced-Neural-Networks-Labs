@@ -8,7 +8,7 @@ import torchvision
 import muon
 from tqdm import tqdm
 import wandb
-from sam import SAMSGD
+from sam import SAM
 
 from utils.caching import CachedDataset
 
@@ -161,6 +161,7 @@ def setup_pipeline(config):
 	optimizer_name = config['optimizer']['name']
 	lr = config['optimizer']['lr']
 	weight_decay = config['optimizer'].get('weight_decay', 0.0)
+
 	if optimizer_name == 'AdamW':
 		optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
 	elif optimizer_name == 'Adam':
@@ -173,34 +174,38 @@ def setup_pipeline(config):
 		optimizer = muon.Muon(model.parameters(), lr=lr, weight_decay=weight_decay, **muon_params)
 	elif optimizer_name == 'SAM':
 		sam_params = config['optimizer'].get('sam_params', {})
-		# base_optimizer_name = sam_params.get('base_optimizer', 'SGD')
+		base_optimizer_name = sam_params.get('base_optimizer', 'SGD')
 		rho = sam_params.get('rho', 0.05)
-		# Extract base optimizer params
-		# base_optimizer_params = {}
-		# if base_optimizer_name == 'SGD':
-		# 	base_optimizer = optim.SGD
-		# 	# Extract SGD params
-		# 	sgd_params = sam_params.get('sgd_params', {})
-		# 	base_optimizer_params['momentum'] = sgd_params.get('momentum', 0.9)
-		# 	base_optimizer_params['dampening'] = sgd_params.get('dampening', 0.0)
-		# 	base_optimizer_params['nesterov'] = sgd_params.get('nesterov', False)
-		# elif base_optimizer_name == 'Adam':
-		# 	base_optimizer = optim.Adam
-		# 	# Extract Adam params
-		# 	adam_params = sam_params.get('adam_params', {})
-		# 	base_optimizer_params['betas'] = tuple(map(float, adam_params.get('betas', [0.9, 0.999])))
-		# 	base_optimizer_params['eps'] = adam_params.get('eps', 1e-8)
-		# 	base_optimizer_params['amsgrad'] = adam_params.get('amsgrad', False)
-		# elif base_optimizer_name == 'AdamW':
-		# 	base_optimizer = optim.AdamW
-		# 	# Extract AdamW params
-		# 	adamw_params = sam_params.get('adamw_params', {})
-		# 	base_optimizer_params['betas'] = tuple(map(float, adamw_params.get('betas', [0.9, 0.999])))
-		# 	base_optimizer_params['eps'] = adamw_params.get('eps', 1e-8)
-		# 	base_optimizer_params['amsgrad'] = adamw_params.get('amsgrad', False)
-		# else:
-		# 	raise ValueError(f"SAM base optimizer {base_optimizer_name} not supported.")
-		optimizer = SAMSGD(model.parameters(), lr=lr, rho=rho)
+    # Dictionary to collect all arguments for the base optimizer
+		base_optimizer_params = {}
+		if base_optimizer_name == 'SGD':
+			base_optimizer = optim.SGD
+			# Extract SGD params
+			sgd_params = sam_params.get('sgd_params', {})
+			base_optimizer_params['momentum'] = sgd_params.get('momentum', 0.9)
+			base_optimizer_params['dampening'] = sgd_params.get('dampening', 0.0)
+			base_optimizer_params['nesterov'] = sgd_params.get('nesterov', False)
+
+		elif base_optimizer_name == 'Adam':
+			base_optimizer = optim.Adam
+			# Extract Adam params
+			adam_params = sam_params.get('adam_params', {})
+			base_optimizer_params['betas'] = tuple(map(float, adam_params.get('betas', [0.9, 0.999])))
+			base_optimizer_params['eps'] = adam_params.get('eps', 1e-8)
+			base_optimizer_params['amsgrad'] = adam_params.get('amsgrad', False)
+
+		elif base_optimizer_name == 'AdamW':
+			base_optimizer = optim.AdamW
+			# Extract AdamW params
+			adamw_params = sam_params.get('adamw_params', {})
+			base_optimizer_params['betas'] = tuple(map(float, adamw_params.get('betas', [0.9, 0.999])))
+			base_optimizer_params['eps'] = adamw_params.get('eps', 1e-8)
+			base_optimizer_params['amsgrad'] = adamw_params.get('amsgrad', False)
+
+		else:
+			raise ValueError(f"SAM base optimizer {base_optimizer_name} not supported.")
+		base_optimizer_instance = base_optimizer(model.parameters(), lr=lr, weight_decay=weight_decay, **base_optimizer_params)
+		optimizer = SAM(model.parameters(), base_optimizer_instance, rho=rho)
 	else:
 		raise ValueError(f"Optimizer {optimizer_name} not supported.")
 
@@ -255,22 +260,45 @@ def train(model, train_loader, device, criterion, optimizer, scaler, enable_half
     correct = 0
     total = 0
     
+    is_sam_optimizer = isinstance(optimizer, SAM) 
+    
     for inputs, targets in train_loader:
-        # inputs, targets = cutmix_or_mixup(inputs, targets)
         inputs, targets = inputs.to(device, non_blocking=True), targets.to(device, non_blocking=True)
+        
         if isinstance(model, nn.Sequential):
             inputs = inputs.view(inputs.size(0), -1)
-		# if targets.ndim > 1:
-        #     # We do this when cutmix or mixup was used, transforming the hard labels into soft labels
-        #     targets = targets.argmax(1)
+
+        if is_sam_optimizer:
+            # --- SAM Training Logic (Two-Step Update) ---
             
-        with torch.autocast(device.type, enabled=enable_half):
-            outputs = model(inputs)
-            loss = criterion(outputs, targets)
-        scaler.scale(loss).backward()
-        scaler.step(optimizer)
-        scaler.update()
-        optimizer.zero_grad()
+            # calculate loss at w, compute gradient, find perturbation (epsilon)
+            # and move model to w + epsilon.
+            with torch.autocast(device.type, enabled=enable_half):
+                outputs = model(inputs)
+                loss = criterion(outputs, targets)
+            scaler.scale(loss).backward()
+            optimizer.first_step(zero_grad=True)
+            
+            # calculate loss and gradient at the perturbed point (w + epsilon).
+            # then perform the actual parameter update using the base optimizer.
+            
+            with torch.autocast(device.type, enabled=enable_half):
+                criterion(model(inputs), targets).backward() 
+            scaler.step(optimizer)
+            scaler.update()
+            
+        else:
+            # --- Standard Optimizer Logic (One-Step Update) ---
+            optimizer.zero_grad()
+            with torch.autocast(device.type, enabled=enable_half):
+                outputs = model(inputs)
+                loss = criterion(outputs, targets)
+            
+            scaler.scale(loss).backward() 
+            scaler.step(optimizer)
+            scaler.update()
+            
+            optimizer.zero_grad()
 
         predicted = outputs.argmax(1)
         total += targets.size(0)

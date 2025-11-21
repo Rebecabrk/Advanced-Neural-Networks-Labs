@@ -1,0 +1,59 @@
+data:
+  data_augmentation: true
+  dataset_name: CIFAR-100
+  transforms:
+    normalization:
+      mean: 0.5,0.5,0.5
+      std: 0.5,0.5,0.5
+
+global:
+  device: auto
+  num_workers: 4
+  report_dir: logs
+  save_dir: checkpoints
+  seed: 42
+
+logging:
+  log_interval_steps: 100
+  project_name: Advanced-NN-Assignment-3
+  reporter: wandb
+  run_name: Base_ResNest26d_SAM
+  
+lr_scheduler:
+  enabled: false
+  gamma: 0.1
+  name: StepLR
+  step_size: 15
+
+model:
+  name: resnest26d
+  pretrained: false
+
+optimizer:
+  lr: 0.001
+  name: SAM
+  sam_params:
+    base_oprimizer: SGD
+    rho: 0.05
+    sgd_params:
+      dampening: 0.0
+      momentum: 0.0
+      nesterov: false
+  weight_decay: 0.01
+
+training:
+  batch_scheduler:
+    batch_size_increments:
+    - 128
+    - 256
+    - 512
+    enabled: true
+    schedule_epochs:
+    - 10
+    - 25
+    - 40
+  batch_size: 128
+  early_stopping:
+    enabled: true
+    patience: 10
+  epochs: 50
