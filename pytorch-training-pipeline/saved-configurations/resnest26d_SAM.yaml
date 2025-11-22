@@ -33,7 +33,7 @@ optimizer:
   lr: 0.001
   name: SAM
   sam_params:
-    base_oprimizer: SGD
+    base_optimizer: SGD
     rho: 0.05
     sgd_params:
       dampening: 0.0
