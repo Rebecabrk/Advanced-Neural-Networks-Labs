@@ -58,7 +58,7 @@ lr_scheduler:
 You can run the script **with or without a config file**:
 
 - **With a config file:**
-  1. Edit your config in `configs/default_config.yaml` or create a new one.
+  1. Edit your config in `pytorch-training-pipeline/configs/default_config.yaml` or create a new one.
   2. Run:
      ```bash
      python pytorch-training-pipeline/main.py --config configs/default_config.yaml
@@ -72,7 +72,16 @@ You can run the script **with or without a config file**:
   - The script will use built-in defaults or interactively prompt you for configuration options.
 
 The pipeline asks the user if they want to save the customized config. If yes, it will be saved as a yaml file.
-> The script must be run from the root project directory (/Advanced-Neural-Networks-Labs)
+
+> The script must be run from the root project directory (`/Advanced-Neural-Networks-Labs`).
+
+**Don't forget to install the requirements before running the pipeline!**
+
+To install all required Python packages, run the following command from the root project directory:
+
+```bash
+pip install -r pytorch-training-pipeline/requirements.txt
+```
 
 **Monitor logs:**
 - TensorBoard: Open a terminal and run `tensorboard --logdir=runs`, then open the provided URL in your browser.
