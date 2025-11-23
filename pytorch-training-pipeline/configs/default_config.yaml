@@ -6,8 +6,7 @@
 # ----------------------------------------------------------------------
 data:
   dataset_name: "MNIST" 
-  data_augmentation: False 
-
+  data_augmentation: False
 # if data_augmentation is True also add a transforms mapping
 # the mapping will contain only the transforms wanted
 # example:
@@ -41,15 +40,14 @@ model:
 # OPTIMIZER CONFIGURATION
 # ----------------------------------------------------------------------
 optimizer:
-  name: "SGD" 
+  name: "SGD"
   lr: 0.001
   weight_decay: 0.01
   # each optimizer has its params mapping 
   sgd_params:
-    momentum: 0.0
+    momentum: 0.9
     dampening: 0.0
     nesterov: False
-
 
 # ----------------------------------------------------------------------
 # TRAINING PARAMETERS
@@ -59,7 +57,7 @@ training:
   batch_size: 128 
   batch_scheduler: 
     enabled: False 
-    schedule_epochs: [10, 25, 40]
+    schedule_epochs: [2, 5, 8]
     batch_size_increments: [128, 256, 512]
   early_stopping:
     enabled: False  
