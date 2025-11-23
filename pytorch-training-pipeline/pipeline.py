@@ -5,8 +5,10 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision
 from tqdm import tqdm
+from torch.utils.tensorboard import SummaryWriter
 import wandb
 from sam import SAM
+# import ipdb
 
 from utils.caching import CachedDataset
 
@@ -280,21 +282,39 @@ def run_pipeline(config):
 	model = setup['model'].to(device)
 	optimizer = setup['optimizer']
 	scheduler = setup['scheduler']
-	# criterion = setup['criterion']
 	criterion = nn.CrossEntropyLoss()
 
 	model = model.to(device)
-	# model = torch.jit.script(model) # compilation
 
 	best = 0.0
 	best_epoch = 0
 	epochs = list(range(config['training'].get('epochs', 50)))
+	
 	wandb.init(project=config['logging'].get('project_name', "Default_Project"), 
 			config=config, name=config['logging'].get('run_name', "Default_Run"))
+	writer = SummaryWriter(log_dir="runs/" + config['logging'].get('run_name', "Default_Run"))
+
+	batch_scheduler_cfg = config['training'].get('batch_scheduler', {})
+	batch_scheduler_enabled = batch_scheduler_cfg.get('enabled', False)
+	schedule_epochs = batch_scheduler_cfg.get('schedule_epochs', [])
+	batch_size_increments = batch_scheduler_cfg.get('batch_size_increments', [])
 
 	with tqdm(epochs) as tbar:
 		for epoch in tbar:
-			# ipdb.set_trace()
+			# Batch size scheduler logic
+			if batch_scheduler_enabled and epoch in schedule_epochs:
+				idx = schedule_epochs.index(epoch)
+				if idx < len(batch_size_increments):
+					new_batch_size = batch_size_increments[idx]
+					trainloader = torch.utils.data.DataLoader(
+						setup['trainloader'].dataset,
+						batch_size=new_batch_size,
+						shuffle=True,
+						num_workers=config['global'].get('num_workers', 4)
+					)
+					print(f"[BatchScheduler] Epoch {epoch}: Updated train batch size to {new_batch_size}")
+
+			print(f"Epoch {epoch}: Current batch size: {trainloader.batch_size}")
 			train_acc = train(
 				model, trainloader, 
 				device, criterion, 
@@ -302,19 +322,29 @@ def run_pipeline(config):
 			val_acc, val_loss = evaluate(
 				model, setup['valloader'], 
 				device, criterion)
+			# Wandb logging
 			wandb.log({
-				"train_acc": train_acc,
-				"val_acc": val_acc,
-				"val_loss": val_loss,
-				"epoch": epoch
+			  "train_acc": train_acc,
+			  "val_acc": val_acc,
+			  "val_loss": val_loss,
+			  "epoch": epoch,
+			  "learning_rate": optimizer.param_groups[0]['lr']
 			})
+			# TensorBoard logging
+			writer.add_scalar("Accuracy/train", train_acc, epoch)
+			writer.add_scalar("Accuracy/val", val_acc, epoch)
+			writer.add_scalar("Loss/val", val_loss, epoch)
+			writer.add_scalar("LearningRate", optimizer.param_groups[0]['lr'], epoch)
+
 			if config['lr_scheduler']['name'] == 'ReduceLROnPlateau':
 				scheduler.step(val_loss)
 			elif scheduler is not None:
 				scheduler.step()
-			
+
 			if train_acc > best:
 				best = train_acc
 				best_epoch = epoch
-				
+
 			tbar.set_description(f"Train: {train_acc:.2f}, Best: {best:.2f} at epoch {best_epoch}")
+
+	writer.close()
