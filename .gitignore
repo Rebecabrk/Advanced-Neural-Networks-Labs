@@ -217,3 +217,4 @@ pytorch-training-pipeline/data/
 
 # wandb
 pytorch-training-pipeline/wandb/
+wandb
