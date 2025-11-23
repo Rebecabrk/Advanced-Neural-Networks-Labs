@@ -72,6 +72,7 @@ You can run the script **with or without a config file**:
   - The script will use built-in defaults or interactively prompt you for configuration options.
 
 The pipeline asks the user if they want to save the customized config. If yes, it will be saved as a yaml file.
+> The script must be run from the root project directory (/Advanced-Neural-Networks-Labs)
 
 **Monitor logs:**
 - TensorBoard: Open a terminal and run `tensorboard --logdir=runs`, then open the provided URL in your browser.
