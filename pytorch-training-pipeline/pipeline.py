@@ -289,7 +289,14 @@ def run_pipeline(config):
 	best = 0.0
 	best_epoch = 0
 	epochs = list(range(config['training'].get('epochs', 50)))
-	
+
+	# Early stopping config
+	early_stopping_cfg = config['training'].get('early_stopping', {})
+	early_stopping_enabled = early_stopping_cfg.get('enabled', False)
+	early_stopping_patience = early_stopping_cfg.get('patience', 10)
+	best_val_loss = float('inf')
+	epochs_no_improve = 0
+
 	wandb.init(project=config['logging'].get('project_name', "Default_Project"), 
 			config=config, name=config['logging'].get('run_name', "Default_Run"))
 	writer = SummaryWriter(log_dir="runs/" + config['logging'].get('run_name', "Default_Run"))
@@ -344,6 +351,18 @@ def run_pipeline(config):
 			if train_acc > best:
 				best = train_acc
 				best_epoch = epoch
+
+			# Early stopping logic
+			if early_stopping_enabled:
+				if val_loss < best_val_loss:
+					best_val_loss = val_loss
+					epochs_no_improve = 0
+				else:
+					epochs_no_improve += 1
+				if epochs_no_improve >= early_stopping_patience:
+					print(f"Early stopping triggered at epoch {epoch+1}. Best val_loss: {best_val_loss:.4f}")
+					tbar.set_description(f"Early stopped at epoch {epoch+1}")
+					break
 
 			tbar.set_description(f"Train: {train_acc:.2f}, Best: {best:.2f} at epoch {best_epoch}")
 
