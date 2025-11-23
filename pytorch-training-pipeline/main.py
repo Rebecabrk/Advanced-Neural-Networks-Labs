@@ -1,3 +1,4 @@
+import os
 import sys
 import argparse
 from pathlib import Path
@@ -45,17 +46,19 @@ def main():
             print("Training aborted by user.")
             sys.exit(0)
 
-    save_choice = input("\nDo you want to save this configuration to a YAML file? (y/n): ").strip().lower()
-    if save_choice == 'y':
-        filename = input("Enter name/small description for the configuration: ").strip()
-        save_path = input("Enter the file path to save the configuration (Default: /saved-configurations)): ").strip()
-        if not save_path:
-            save_path = "saved-configurations/{}_config.yaml".format(filename.replace(" ", "_"))
-        try:
-            save_config_to_yaml(config, save_path)
-            print(f"Configuration saved to {save_path}")
-        except Exception as e:
-            print(f"Failed to save configuration: {e}")
+    if not args.config:
+        save_choice = input("\nDo you want to save this configuration to a YAML file? (y/n): ").strip().lower()
+        if save_choice == 'y':
+            filename = input("Enter name/small description for the configuration: ").strip()
+            save_path = input("Enter the file path to save the configuration (Default: /saved-configurations)): ").strip()
+            if not save_path:
+                root = os.getcwd()
+                save_path = os.path.join(root, "saved-configurations", "{}_config.yaml".format(filename.replace(" ", "_")))
+            try:
+                save_config_to_yaml(config, save_path)
+                print(f"Configuration saved to {save_path}")
+            except Exception as e:
+                print(f"Failed to save configuration: {e}")
 
     try:
         run_pipeline(config)
