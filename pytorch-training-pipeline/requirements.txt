@@ -10,3 +10,5 @@ torch-optimizer
 # for debugging in colab
 ipdb
 sam-pytorch
+tensorboard
+wandb
