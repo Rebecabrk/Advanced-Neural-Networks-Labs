@@ -263,12 +263,16 @@ def get_commandline_config(current_config):
         default=0.0001, # Standard default not in the minimal config
         constraints={'range': [0.0, 1.0]}
     )
+    # Only allow Muon if model is MLP
+    allowed_optimizers = VALID_OPTIMIZERS.copy()
+    if custom_cfg['model']['name'] != 'MLP' and 'Muon' in allowed_optimizers:
+        allowed_optimizers.remove('Muon')
     custom_cfg['optimizer']['name'] = get_validated_input(
-        f"Choose optimizer {VALID_OPTIMIZERS}",
+        f"Choose optimizer {allowed_optimizers}",
         'choice',
         "Invalid optimizer choice",
-        default=current_config['optimizer']['name'],
-        constraints={'valid_list': VALID_OPTIMIZERS}
+        default=current_config['optimizer']['name'] if current_config['optimizer']['name'] in allowed_optimizers else allowed_optimizers[0],
+        constraints={'valid_list': allowed_optimizers}
     )
     
     custom_cfg = get_optimizer_params(custom_cfg['optimizer']['name'], custom_cfg)
