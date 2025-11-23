@@ -1,11 +1,9 @@
 import torch
 import timm
-from torch.cuda.amp import GradScaler
 import torchvision.transforms.v2 as v2
 import torch.nn as nn
 import torch.optim as optim
 import torchvision
-import muon
 from tqdm import tqdm
 import wandb
 from sam import SAM
@@ -15,32 +13,20 @@ from utils.caching import CachedDataset
 def setup_pipeline(config):
 	print("Setting up the training pipeline...")
 	device = torch.device('cuda' if torch.cuda.is_available() and config['global']['device'] == 'auto' else 'cpu')
-	enable_half = device.type != "cpu"
-	scaler = GradScaler(device, enabled=enable_half)
 
-	print("Grad scaler is enabled:", enable_half)
 	if device.type == "cuda":
-    # This flag tells pytorch to use the cudnn auto-tuner to find the most efficient convolution algorithm for
-    # This training.
 		torch.backends.cudnn.benchmark = True
 		torch.set_float32_matmul_precision('high')
 		print("Benchmark set to true with high float32 precision")
 	else:
 		print("Cuda is not used")
 
-    # transforms
-	test_transforms = [
-		# v2.ToTensor(),
-		v2.ToImage(),  
-		v2.ToDtype(torch.float32, scale=True)
-	]
-	cacheable_transforms = [
-		# v2.ToTensor(), 
-		v2.ToImage(),
-		v2.ToDtype(torch.float32, scale=True)]
+	# transforms
+	test_transforms = []
+	cacheable_transforms = []
 	runtime_transforms = []
 	normalization_cfg = None
-	
+
 	if config['data'].get('data_augmentation', False):
 		t_cfg = config['data'].get('transforms', {})
 		if t_cfg.get('normalization', {}).get('enabled', False):
@@ -73,19 +59,31 @@ def setup_pipeline(config):
 			p = t_cfg['random_erasing'].get('probability', 0.1)
 			runtime_transforms.append(v2.RandomErasing(p=p))
 
+	# Add default resize for OxfordIIITPet if no resizing present
+	dataset_name = config['data']['dataset_name']
+	has_resize = any(isinstance(t, v2.Resize) for t in runtime_transforms)
+	if dataset_name == 'OxfordIIITPet' and not has_resize:
+		# 224x224 is a common size for pretrained models
+		runtime_transforms.insert(0, v2.Resize((224, 224)))
+
+	# Always add ToImage and ToDtype after augmentations but before normalization
+	test_transforms.extend(runtime_transforms)
+	test_transforms.append(v2.ToImage())
+	test_transforms.append(v2.ToDtype(torch.float32, scale=True))
+	cacheable_transforms.extend(runtime_transforms)
+	cacheable_transforms.append(v2.ToImage())
+	cacheable_transforms.append(v2.ToDtype(torch.float32, scale=True))
+
 	if normalization_cfg is not None:
 		mean = normalization_cfg.get('mean', [0.5, 0.5, 0.5])
 		std = normalization_cfg.get('std', [0.5, 0.5, 0.5])
 		test_transforms.append(v2.Normalize(mean=mean, std=std))
-		if len(runtime_transforms) > 0:
-			runtime_transforms.append(v2.Normalize(mean=mean, std=std))
-		else:
-			cacheable_transforms.append(v2.Normalize(mean=mean, std=std))
+		cacheable_transforms.append(v2.Normalize(mean=mean, std=std))
 
 	test_transforms = v2.Compose(test_transforms)
 	cacheable_transform = v2.Compose(cacheable_transforms)
-	runtime_transform = v2.Compose(runtime_transforms) if runtime_transforms else None
-  
+	runtime_transform = None  # runtime_transforms are now included above
+
 	# dataset
 	dataset_name = config['data']['dataset_name']
 	if dataset_name == 'CIFAR-100':
@@ -134,8 +132,13 @@ def setup_pipeline(config):
 		dropout = mlp_params.get('dropout', 0.5)
 		layers = []
 		in_features = input_size
+		
+		optimizer_name = config['optimizer']['name']
+		use_bias = not (optimizer_name == 'Muon')
+		print(f"Using bias in MLP layers: {use_bias}")
+
 		for h, act in zip(hidden_layers, activations):
-			layers.append(nn.Linear(in_features, h))
+			layers.append(nn.Linear(in_features, h, bias=use_bias))
 			if act == 'ReLU':
 				layers.append(nn.ReLU())
 			elif act == 'Tanh':
@@ -147,7 +150,7 @@ def setup_pipeline(config):
 			if dropout:
 				layers.append(nn.Dropout(dropout))
 			in_features = h
-		layers.append(nn.Linear(in_features, num_classes))
+		layers.append(nn.Linear(in_features, num_classes, bias=use_bias))
 		model = nn.Sequential(*layers)
 	else:
 		pretrained = config['model'].get('pretrained', False)
@@ -171,41 +174,21 @@ def setup_pipeline(config):
 		optimizer = optim.SGD(model.parameters(), lr=lr, weight_decay=weight_decay, momentum=momentum)
 	elif optimizer_name == 'Muon':
 		muon_params = config['optimizer'].get('muon_params', {})
-		optimizer = muon.Muon(model.parameters(), lr=lr, weight_decay=weight_decay, **muon_params)
+		optimizer = optim.Muon(model.parameters(), lr=lr, weight_decay=weight_decay, **muon_params)
 	elif optimizer_name == 'SAM':
 		sam_params = config['optimizer'].get('sam_params', {})
 		base_optimizer_name = sam_params.get('base_optimizer', 'SGD')
 		rho = sam_params.get('rho', 0.05)
-    # Dictionary to collect all arguments for the base optimizer
 		base_optimizer_params = {}
 		if base_optimizer_name == 'SGD':
 			base_optimizer = optim.SGD
-			# Extract SGD params
-			sgd_params = sam_params.get('sgd_params', {})
-			base_optimizer_params['momentum'] = sgd_params.get('momentum', 0.9)
-			base_optimizer_params['dampening'] = sgd_params.get('dampening', 0.0)
-			base_optimizer_params['nesterov'] = sgd_params.get('nesterov', False)
-
 		elif base_optimizer_name == 'Adam':
 			base_optimizer = optim.Adam
-			# Extract Adam params
-			adam_params = sam_params.get('adam_params', {})
-			base_optimizer_params['betas'] = tuple(map(float, adam_params.get('betas', [0.9, 0.999])))
-			base_optimizer_params['eps'] = adam_params.get('eps', 1e-8)
-			base_optimizer_params['amsgrad'] = adam_params.get('amsgrad', False)
-
 		elif base_optimizer_name == 'AdamW':
 			base_optimizer = optim.AdamW
-			# Extract AdamW params
-			adamw_params = sam_params.get('adamw_params', {})
-			base_optimizer_params['betas'] = tuple(map(float, adamw_params.get('betas', [0.9, 0.999])))
-			base_optimizer_params['eps'] = adamw_params.get('eps', 1e-8)
-			base_optimizer_params['amsgrad'] = adamw_params.get('amsgrad', False)
-
 		else:
 			raise ValueError(f"SAM base optimizer {base_optimizer_name} not supported.")
-		base_optimizer_instance = base_optimizer(model.parameters(), lr=lr, weight_decay=weight_decay, **base_optimizer_params)
-		optimizer = SAM(model.parameters(), base_optimizer_instance, rho=rho)
+		optimizer = SAM(model.parameters(), base_optimizer, rho=rho)
 	else:
 		raise ValueError(f"Optimizer {optimizer_name} not supported.")
 
@@ -229,82 +212,65 @@ def setup_pipeline(config):
 		'testloader': testloader,
 		'model': model,
 		'optimizer': optimizer,
-		'scheduler': scheduler,
-		'scaler': scaler,
-		'enable_half': enable_half
+		'scheduler': scheduler
 	}
 
-def evaluate(model, val_loader, device, criterion, enable_half):
-    model.eval()
-    correct = 0
-    total = 0
-    val_loss = 0.0
-    with torch.no_grad():
-        for inputs, targets in val_loader:
-            inputs, targets = inputs.to(device, non_blocking=True), targets.to(device, non_blocking=True)
-            if isinstance(model, nn.Sequential):
-                inputs = inputs.view(inputs.size(0), -1)
-            with torch.autocast(device.type, enabled=enable_half):
-                outputs = model(inputs)
-                loss = criterion(outputs, targets)
-            val_loss += loss.item() * targets.size(0)
-            predicted = outputs.argmax(1)
-            total += targets.size(0)
-            correct += predicted.eq(targets).sum().item()
-    avg_loss = val_loss / total
-    accuracy = 100.0 * correct / total
-    return accuracy, avg_loss
+def evaluate(model, val_loader, device, criterion):
+	model.eval()
+	correct = 0
+	total = 0
+	val_loss = 0.0
+	with torch.no_grad():
+		for inputs, targets in val_loader:
+			inputs, targets = inputs.to(device, non_blocking=True), targets.to(device, non_blocking=True)
+			if isinstance(model, nn.Sequential):
+				inputs = inputs.view(inputs.size(0), -1)
+			outputs = model(inputs)
+			loss = criterion(outputs, targets)
+			val_loss += loss.item() * targets.size(0)
+			predicted = outputs.argmax(1)
+			total += targets.size(0)
+			correct += predicted.eq(targets).sum().item()
+	avg_loss = val_loss / total
+	accuracy = 100.0 * correct / total
+	return accuracy, avg_loss
 
-def train(model, train_loader, device, criterion, optimizer, scaler, enable_half):
-    model.train()
-    correct = 0
-    total = 0
-    
-    is_sam_optimizer = isinstance(optimizer, SAM) 
-    
-    for inputs, targets in train_loader:
-        inputs, targets = inputs.to(device, non_blocking=True), targets.to(device, non_blocking=True)
-        
-        if isinstance(model, nn.Sequential):
-            inputs = inputs.view(inputs.size(0), -1)
+def train(model, train_loader, device, criterion, optimizer):
+	model.train()
+	correct = 0
+	total = 0
 
-        if is_sam_optimizer:
-            # --- SAM Training Logic (Two-Step Update) ---
-            
-            # calculate loss at w, compute gradient, find perturbation (epsilon)
-            # and move model to w + epsilon.
-            with torch.autocast(device.type, enabled=enable_half):
-                outputs = model(inputs)
-                loss = criterion(outputs, targets)
-            scaler.scale(loss).backward()
-            optimizer.first_step(zero_grad=True)
-            
-            # calculate loss and gradient at the perturbed point (w + epsilon).
-            # then perform the actual parameter update using the base optimizer.
-            
-            with torch.autocast(device.type, enabled=enable_half):
-                criterion(model(inputs), targets).backward() 
-            scaler.step(optimizer)
-            scaler.update()
-            
-        else:
-            # --- Standard Optimizer Logic (One-Step Update) ---
-            optimizer.zero_grad()
-            with torch.autocast(device.type, enabled=enable_half):
-                outputs = model(inputs)
-                loss = criterion(outputs, targets)
-            
-            scaler.scale(loss).backward() 
-            scaler.step(optimizer)
-            scaler.update()
-            
-            optimizer.zero_grad()
+	is_sam_optimizer = isinstance(optimizer, SAM)
 
-        predicted = outputs.argmax(1)
-        total += targets.size(0)
-        correct += predicted.eq(targets).sum().item()
-    
-    return 100.0 * correct / total
+	for inputs, targets in train_loader:
+		inputs, targets = inputs.to(device, non_blocking=True), targets.to(device, non_blocking=True)
+
+		if isinstance(model, nn.Sequential): # or isinstance(optimizer, optim.Muon):
+			inputs = inputs.view(inputs.size(0), -1)
+
+		if is_sam_optimizer:
+			# --- SAM Training Logic (Two-Step Update) ---
+			optimizer.zero_grad()
+			outputs = model(inputs)
+			loss = criterion(outputs, targets)
+			loss.backward()
+			optimizer.step(lambda: criterion(model(inputs), targets))
+		else:
+			# --- Standard Optimizer Logic (One-Step Update) ---
+			optimizer.zero_grad()
+			outputs = model(inputs)
+			loss = criterion(outputs, targets)
+			loss.backward()
+			optimizer.step()
+			optimizer.zero_grad()
+		if is_sam_optimizer:
+			with torch.no_grad():
+				outputs = model(inputs)
+
+		predicted = outputs.argmax(1)
+		total += targets.size(0)
+		correct += predicted.eq(targets).sum().item()
+	return 100.0 * correct / total
 
 def run_pipeline(config):
 	setup = setup_pipeline(config)
@@ -314,8 +280,6 @@ def run_pipeline(config):
 	model = setup['model'].to(device)
 	optimizer = setup['optimizer']
 	scheduler = setup['scheduler']
-	scaler = setup['scaler']
-	enable_half = setup['enable_half']
 	# criterion = setup['criterion']
 	criterion = nn.CrossEntropyLoss()
 
@@ -330,14 +294,14 @@ def run_pipeline(config):
 
 	with tqdm(epochs) as tbar:
 		for epoch in tbar:
+			# ipdb.set_trace()
 			train_acc = train(
 				model, trainloader, 
 				device, criterion, 
-				optimizer, scaler, 
-				enable_half)
+				optimizer)
 			val_acc, val_loss = evaluate(
 				model, setup['valloader'], 
-				device, criterion, enable_half)
+				device, criterion)
 			wandb.log({
 				"train_acc": train_acc,
 				"val_acc": val_acc,
